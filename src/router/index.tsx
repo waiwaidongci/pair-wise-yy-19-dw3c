@@ -3,6 +3,7 @@ import App from '../App';
 import { DesignView } from '../views/DesignView';
 import { NestingView } from '../views/NestingView';
 import { ExportView } from '../views/ExportView';
+import { CollabView } from '../views/CollabView';
 
 export const router = createBrowserRouter([
   {
@@ -12,6 +13,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/design" replace /> },
       { path: 'design', element: <DesignView /> },
       { path: 'nesting', element: <NestingView /> },
+      { path: 'collab', element: <CollabView /> },
       { path: 'export', element: <ExportView /> },
       { path: '*', element: <Navigate to="/design" replace /> },
     ],

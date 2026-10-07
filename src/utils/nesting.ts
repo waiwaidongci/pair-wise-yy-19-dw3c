@@ -14,10 +14,6 @@ function expandedParts(parts: Part[]) {
   );
 }
 
-function canRotate(part: Part) {
-  return part.grain === 'none';
-}
-
 function dimensions(part: Part, rotated: boolean) {
   return rotated
     ? { width: part.width, height: part.length }
@@ -38,28 +34,41 @@ export function getPartPlacementSize(part: Part, rotated = false) {
   return dimensions(part, rotated);
 }
 
-export function nestProject(
+export interface StockNesting {
+  stockId: string;
+  layouts: SheetLayout[];
+  placements: Placement[];
+  unplaced: NestingResult['unplaced'];
+  usedArea: number;
+  sheetArea: number;
+  wasteArea: number;
+  sheetCount: number;
+  purchaseCost: number;
+  elapsedMs: number;
+  collisions: string[];
+}
+
+// 单种板材的排料：只依赖归属该板材的零件。零件改尺寸时，只有这种板材的排料图与成本失效重算。
+export function nestStock(
+  stock: StockSheet,
+  parts: Part[],
   project: WoodworkingProject,
   manualPositions: Record<string, ManualPosition>,
-): NestingResult {
+): StockNesting {
   const startedAt = performance.now();
-  const stockById = new Map(project.stocks.map((stock) => [stock.id, stock]));
-  const expanded = expandedParts(project.parts)
-    .filter(({ part }) => stockById.has(part.stockId))
-    .sort((a, b) => {
-      const areaA = a.part.length * a.part.width;
-      const areaB = b.part.length * b.part.width;
-      if (a.part.grain !== 'none' && b.part.grain === 'none') return -1;
-      if (a.part.grain === 'none' && b.part.grain !== 'none') return 1;
-      return areaB - areaA || b.part.length - a.part.length;
-    });
+  const expanded = expandedParts(parts).sort((a, b) => {
+    const areaA = a.part.length * a.part.width;
+    const areaB = b.part.length * b.part.width;
+    if (a.part.grain !== 'none' && b.part.grain === 'none') return -1;
+    if (a.part.grain === 'none' && b.part.grain !== 'none') return 1;
+    return areaB - areaA || b.part.length - a.part.length;
+  });
 
   const placements: Placement[] = [];
   const unplaced: NestingResult['unplaced'] = [];
-  const sheetCounter = new Map<string, number>();
+  let sheetCount = 0;
 
   expanded.forEach(({ part, instance }) => {
-    const stock = stockById.get(part.stockId)!;
     const usableWidth = stock.length - project.trim * 2;
     const usableHeight = stock.width - project.trim * 2;
     const candidates = part.grain === 'none' ? [false, true] : [part.grain === 'width'];
@@ -68,11 +77,9 @@ export function nestProject(
     for (const rotated of candidates) {
       const size = dimensions(part, rotated);
       if (size.width > usableWidth || size.height > usableHeight) continue;
-      const availableSheets = Math.max(1, sheetCounter.get(stock.id) ?? 0);
+      const availableSheets = Math.max(1, sheetCount);
       for (let sheetIndex = 0; sheetIndex <= availableSheets && !placed; sheetIndex += 1) {
-        const sheetPlacements = placements.filter(
-          (item) => item.stockId === stock.id && item.sheetIndex === sheetIndex,
-        );
+        const sheetPlacements = placements.filter((item) => item.sheetIndex === sheetIndex);
         const rows = new Map<number, { y: number; height: number; usedWidth: number }>();
         sheetPlacements.forEach((item) => {
           const row = rows.get(item.y) ?? { y: item.y, height: 0, usedWidth: 0 };
@@ -124,7 +131,7 @@ export function nestProject(
         }
 
         if (placed) {
-          sheetCounter.set(stock.id, Math.max(sheetCounter.get(stock.id) ?? 0, sheetIndex + 1));
+          sheetCount = Math.max(sheetCount, sheetIndex + 1);
         }
       }
       if (placed) break;
@@ -148,7 +155,7 @@ export function nestProject(
         rotated: manual.rotated,
         manual: true,
       });
-      sheetCounter.set(placed.stockId, Math.max(sheetCounter.get(placed.stockId) ?? 0, manual.sheetIndex + 1));
+      sheetCount = Math.max(sheetCount, manual.sheetIndex + 1);
     } else {
       placements.push(placed);
     }
@@ -162,44 +169,80 @@ export function nestProject(
   });
 
   const layouts: SheetLayout[] = [];
-  sheetCounter.forEach((count, stockId) => {
-    const stock = stockById.get(stockId);
-    if (!stock) return;
-    for (let sheetIndex = 0; sheetIndex < count; sheetIndex += 1) {
-      const sheetPlacements = placements.filter(
-        (item) => item.stockId === stockId && item.sheetIndex === sheetIndex,
-      );
-      const usedArea = sheetPlacements.reduce((sum, item) => sum + item.width * item.height, 0);
-      const usableArea = (stock.length - project.trim * 2) * (stock.width - project.trim * 2);
-      layouts.push({
-        stockId,
-        sheetIndex,
-        stock,
-        placements: sheetPlacements,
-        usedArea,
-        usableArea,
-        wasteArea: Math.max(0, usableArea - usedArea),
-      });
-    }
-  });
+  for (let sheetIndex = 0; sheetIndex < sheetCount; sheetIndex += 1) {
+    const sheetPlacements = placements.filter((item) => item.sheetIndex === sheetIndex);
+    const usedArea = sheetPlacements.reduce((sum, item) => sum + item.width * item.height, 0);
+    const usableArea = (stock.length - project.trim * 2) * (stock.width - project.trim * 2);
+    layouts.push({
+      stockId: stock.id,
+      sheetIndex,
+      stock,
+      placements: sheetPlacements,
+      usedArea,
+      usableArea,
+      wasteArea: Math.max(0, usableArea - usedArea),
+    });
+  }
 
   const usedArea = placements.reduce((sum, item) => sum + item.width * item.height, 0);
   const sheetArea = layouts.reduce((sum, layout) => sum + layout.stock.length * layout.stock.width, 0);
-  const purchaseCost = layouts.reduce((sum, layout) => sum + layout.stock.price, 0);
+
+  return {
+    stockId: stock.id,
+    layouts,
+    placements,
+    unplaced,
+    usedArea,
+    sheetArea,
+    wasteArea: layouts.reduce((sum, layout) => sum + layout.wasteArea, 0),
+    sheetCount,
+    purchaseCost: layouts.length * stock.price,
+    elapsedMs: Math.round((performance.now() - startedAt) * 10) / 10,
+    collisions,
+  };
+}
+
+export function nestProject(
+  project: WoodworkingProject,
+  manualPositions: Record<string, ManualPosition>,
+): NestingResult {
+  const startedAt = performance.now();
+  const stockById = new Map(project.stocks.map((stock) => [stock.id, stock]));
+  const partsByStock = new Map<string, Part[]>();
+  project.parts.forEach((part) => {
+    if (!stockById.has(part.stockId)) return;
+    const list = partsByStock.get(part.stockId) ?? [];
+    list.push(part);
+    partsByStock.set(part.stockId, list);
+  });
+
+  const stockResults = project.stocks.map((stock) =>
+    nestStock(stock, partsByStock.get(stock.id) ?? [], project, manualPositions),
+  );
+
+  const layouts = stockResults.flatMap((result) => result.layouts);
+  const placements = stockResults.flatMap((result) => result.placements);
+  const unplaced = stockResults.flatMap((result) => result.unplaced);
+  const usedArea = stockResults.reduce((sum, result) => sum + result.usedArea, 0);
+  const sheetArea = stockResults.reduce((sum, result) => sum + result.sheetArea, 0);
+  const wasteArea = stockResults.reduce((sum, result) => sum + result.wasteArea, 0);
+  const purchaseCost = stockResults.reduce((sum, result) => sum + result.purchaseCost, 0);
+  const sheetCount = stockResults.reduce((sum, result) => sum + result.sheetCount, 0);
   const utilization = sheetArea > 0 ? (usedArea / sheetArea) * 100 : 0;
+  const collisions = stockResults.flatMap((result) => result.collisions);
 
   return {
     layouts,
     placements,
-    totalParts: expanded.length,
+    totalParts: expandedParts(project.parts).length,
     placedParts: placements.length,
     unplaced,
     usedArea,
     sheetArea,
     utilization,
-    wasteArea: layouts.reduce((sum, layout) => sum + layout.wasteArea, 0),
+    wasteArea,
     purchaseCost,
-    sheetCount: layouts.length,
+    sheetCount,
     elapsedMs: Math.round((performance.now() - startedAt) * 10) / 10,
     collisions,
   };
