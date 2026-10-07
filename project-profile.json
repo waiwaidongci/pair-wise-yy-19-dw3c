@@ -1,0 +1,12 @@
+{
+  "projectId": "pair-wise-yy-19",
+  "projectName": "JoineryNest 木工榫卯与板材切割清单",
+  "category": "制造排料",
+  "businessDomain": "家具制造",
+  "projectForm": "完整项目",
+  "codeScope": "frontend",
+  "languages": "React, TypeScript, Vite, Chakra UI, Jotai, React Router, Canvas",
+  "summary": "设计家具零件与榫卯连接，按板材规格、锯缝、修边和纹理方向生成切割清单及可手动微调的排料图。",
+  "containerized": false
+}
+

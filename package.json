@@ -1,0 +1,29 @@
+{
+  "name": "pair-wise-yy-19",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bash scripts/vite-with-fixed-node.sh dev",
+    "build": "tsc -b && bash scripts/vite-with-fixed-node.sh build",
+    "preview": "bash scripts/vite-with-fixed-node.sh preview"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "^2.10.9",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "framer-motion": "^12.23.24",
+    "jotai": "^2.15.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.9.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.9"
+  }
+}
