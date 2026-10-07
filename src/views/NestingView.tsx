@@ -22,7 +22,7 @@ import {
 } from '@chakra-ui/react';
 import { AlertTriangle, RefreshCw, RotateCw } from 'lucide-react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { manualPositionsAtom, nestingResultAtom, projectAtom, revisionAtom } from '../stores/project';
+import { forceRenestAtom, manualPositionsAtom, nestingResultAtom, projectAtom } from '../stores/project';
 import { NestingCanvas } from '../components/NestingCanvas';
 import { formatArea } from '../utils/nesting';
 import type { ManualPosition } from '../types/woodworking';
@@ -30,7 +30,7 @@ import type { ManualPosition } from '../types/woodworking';
 export function NestingView() {
   const [project, setProject] = useAtom(projectAtom);
   const [manualPositions, setManualPositions] = useAtom(manualPositionsAtom);
-  const setRevision = useSetAtom(revisionAtom);
+  const forceRenest = useSetAtom(forceRenestAtom);
   const result = useAtomValue(nestingResultAtom);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
@@ -42,8 +42,7 @@ export function NestingView() {
   };
 
   const rebuild = () => {
-    setManualPositions({});
-    setRevision((value) => value + 1);
+    forceRenest();
     setSelectedKey(null);
   };
 
@@ -57,6 +56,8 @@ export function NestingView() {
         </Box>
         <Button colorScheme="teal" leftIcon={<RefreshCw size={16} />} onClick={rebuild}>重新排料</Button>
       </Flex>
+
+      <IncrementalBanner result={result} />
 
       <SimpleGrid columns={{ base: 2, lg: 5 }} spacing="10px" mb="14px">
         <Metric label="板材用量" value={`${result.sheetCount} 张`} accent="teal" />
@@ -186,6 +187,40 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
     <Box borderWidth="1px" borderColor="slate.200" borderRadius="10px" bg="white" p="12px">
       <Text fontSize="9px" color="slate.500" textTransform="uppercase" letterSpacing=".06em" fontWeight="800">{label}</Text>
       <Text mt="5px" fontSize="20px" fontWeight="900" color={`${accent}.700`}>{value}</Text>
+    </Box>
+  );
+}
+
+function IncrementalBanner({ result }: { result: ReturnType<typeof useAtomValue<typeof nestingResultAtom>> }) {
+  const info = result.incremental;
+  if (!info) return null;
+  const fullRebuild = info.changedPartIds === null;
+  const changedIds = info.changedPartIds ?? [];
+  const reused = info.reusedSheets.length;
+  const recomputed = info.recomputedSheets.length;
+  return (
+    <Box
+      borderWidth="1px"
+      borderColor={fullRebuild ? 'orange.200' : 'teal.200'}
+      bg={fullRebuild ? 'orange.50' : 'teal.50'}
+      borderRadius="10px"
+      px="12px"
+      py="8px"
+      mb="12px"
+    >
+      <HStack spacing="10px" fontSize="10px" color={fullRebuild ? 'orange.800' : 'teal.800'}>
+        <RefreshCw size={13} />
+        <Text fontWeight="800">
+          {fullRebuild
+            ? '锯缝 / 修边 / 板材规格变化：全部排料图与成本已重算'
+            : changedIds.length === 0
+              ? `无零件变化：${reused} 张排料图沿用缓存（${info.elapsedMs.toFixed(1)} ms）`
+              : `增量重算：${recomputed} 张依赖被改零件的排料图及成本已重算，其余 ${reused} 张沿用`}
+        </Text>
+        {info.createdSheets.length > 0 && (
+          <Badge colorScheme="purple" variant="subtle">新增 {info.createdSheets.length} 张</Badge>
+        )}
+      </HStack>
     </Box>
   );
 }

@@ -1,5 +1,5 @@
-import { Badge, Box, Button, Flex, HStack, Text } from '@chakra-ui/react';
-import { Boxes, FileOutput, LayoutGrid, Ruler, Settings2 } from 'lucide-react';
+import { Badge, Box, Button, HStack, Text } from '@chakra-ui/react';
+import { Boxes, ClipboardList, FileOutput, LayoutGrid, Ruler, Settings2 } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import { projectAtom, projectStatsAtom } from './stores/project';
@@ -7,6 +7,7 @@ import { projectAtom, projectStatsAtom } from './stores/project';
 const navItems = [
   { path: '/design', label: '零件与榫卯', icon: LayoutGrid },
   { path: '/nesting', label: '板材排料', icon: Boxes },
+  { path: '/remnants', label: '余料台账', icon: ClipboardList },
   { path: '/export', label: '清单与交付', icon: FileOutput },
 ];
 
